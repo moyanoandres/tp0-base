@@ -34,6 +34,8 @@ services:
       - LOGGING_LEVEL=DEBUG
     networks:
       - testing_net
+    volumes:
+      - ./server/config.ini:/config.ini
 
 networks:
   testing_net:
@@ -56,7 +58,8 @@ def create_compose_file(data, filename, number_of_clients):
                 "CLI_LOG_LEVEL=DEBUG"
             ],
             "networks": ["testing_net"],
-            "depends_on": ["server"]
+            "depends_on": ["server"],
+            "volumes": ["./client/config.yaml:/config.yaml"]
         }
     
     data['services'] = services
