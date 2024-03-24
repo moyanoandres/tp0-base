@@ -76,3 +76,16 @@ donde cada apuesta tiene el mismo formato que cuando se mandaba una sola, defini
 Ahora cada cliente tiene un volume de docker con su respectivo archivo csv en el sistema host, y tiene el valor batchsize configurable en client/config.yaml. El cliente lee de a batchsize entries del archivo, crea un array de apuestas y le delega el envío y recepción de confirmación al módulo de comunicación. Este se encarga de formatear el mensaje y colocarle su correspondiente header y de interpretar la respuesta del servidor.    
 
 El servidor ahora interpreta los mensajes de tipo BET en su módulo de comunicación y devuelve un ACK al cliente si todas las apuestas de ese mensaje pudieron ser parseadas correctamente (y si estas son la misma cantidad que indicaba el header del mensaje que fueron enviadas).
+
+## EJ 7:
+
+El protocolo de comunicación fue extendido y ahora contiene 2 tipos más de mensajes, FIN y WIN. 
+
+FIN es enviado al servidor por el cliente para notificar que está listo para recibir los resultados.   
+
+El servidor almacena en su estado a los sockets de los clientes listos y, cuando todos lo están, les envía a cada uno WIN con los DNIs de los ganadores de su agencia.    
+
+Cada vez que el servidor maneja una nueva conexión aceptada, solicita el header del mensaje entrante a communication.py con la función get_header() y según el tipo de mensaje que sea (BET o FIN) procede de manera pertinente. 
+
+El cliente una vez que manda FIN espera recibir WIN de parte del servidor con los DNIs ganadores de su agencia y tras recibirlos, libera los recursos y concluye su ejecución.
+

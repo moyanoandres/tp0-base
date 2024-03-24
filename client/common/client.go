@@ -113,14 +113,29 @@ loop:
 			betID++
 		}
 
+		//If no more bets, send FIN msg to server, receive winners and exit the loop
 		if len(bets) == 0 {
 			log.Infof("action: finished_loading_file | result: success | client_id: %v | final_batch_id: %v",
 				c.config.ID,
 				batchID-1,
 			)
+			winners, err := sendEndNotification(c)
+			c.conn.Close()
+
+			if err == nil {
+				log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %v",
+					winners,
+				)
+			} else {
+				log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v",
+					c.config.ID,
+					err,
+				)
+			}
 			break loop
 		}
 
+		//send batch of bets to server
 		result, err := SendBatch(c, bets, batchID)
 		if c.shuttingDown {
 			c.conn.Close()

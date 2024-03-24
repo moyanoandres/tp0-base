@@ -10,66 +10,92 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// SendMessage sends a bet to the server, returns true if the bet was confirmed.
-func SendBet(c *Client, bet Bet) (bool, error) {
-	//socket creation and graceful shutdown handling
+const (
+	HEADER_SIZE = 8
+)
 
+func receiveWIN(conn net.Conn) (int, error) {
+	// Read the header (WIN message) from the server
+	header := make([]byte, HEADER_SIZE) // Header size is fixed at 8 bytes: 'WIN,' + 4 bytes of payload size
+	n, err := io.ReadFull(conn, header)
+	if err != nil || n < HEADER_SIZE {
+		return -1, err
+	}
+
+	// Parse the header to get the payload size
+	headerStr := string(header)
+	parts := strings.Split(headerStr, ",")
+	if len(parts) != 2 || parts[0] != "WIN" {
+		return -1, fmt.Errorf("invalid WIN header format")
+	}
+
+	payloadSize, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return -1, err
+	}
+
+	// Read the payload using the determined payload size
+	winPayload := make([]byte, payloadSize)
+	totalBytesRead := 0
+	for totalBytesRead < payloadSize {
+		bytesRead, err := conn.Read(winPayload[totalBytesRead:])
+		if err != nil {
+			return -1, err
+		}
+		totalBytesRead += bytesRead
+	}
+
+	if len(winPayload) == 0 { //no hubieron ganadores
+		return 0, nil
+	}
+
+	DNIs := strings.Split(string(winPayload), ",")
+	return len(DNIs), nil
+
+}
+
+func sendEndNotification(c *Client) (int, error) {
+	//socket creation and graceful shutdown handling
 	err := c.createClientSocket()
 	if err != nil {
-		return false, err
+		return -1, err
 	}
 	if c.shuttingDown {
 		c.conn.Close()
-		return false, err
+		return -1, err
 	}
 
-	// Creating the message with its header from the bet received
-	payload := fmt.Sprintf("%s,%d,%s,%s,%s,%s,%s", bet.ClientID, bet.BetID, bet.Name, bet.Surname, bet.DNI, bet.Birthdate, bet.Number)
-	message := fmt.Sprintf("BET,%04d,%s", len(payload), payload)
-
-	log.Infof("Bet message being sent: %v",
-		message,
-	)
-
-	// Send message to the server
-	log.Infof("action: send_bet | result: in_progress | client_id: %v | bet_id: %v",
+	clientID, err := strconv.Atoi(c.config.ID)
+	message := fmt.Sprintf("FIN000000%4d\n", clientID)
+	log.Infof("action: send_fin | result: in_progress | client_id: %v",
 		c.config.ID,
-		bet.BetID,
 	)
-	message += "\n"
-
 	sentBytes := 0
 	for sentBytes < len(message) {
 		n, err := fmt.Fprintf(c.conn, message[sentBytes:])
 		if err != nil {
-			return false, err
+			log.Infof("action: send_fin | result: fail | client_id: %v",
+				c.config.ID,
+			)
+			return -1, err
 		}
 		if n == 0 {
-			return false, fmt.Errorf("connection closed by remote host")
+			return -1, fmt.Errorf("conexión cerrada por el host remoto")
 		}
 		sentBytes += n
 	}
 
-	log.Infof("action: send_bet | result: success | client_id: %v | bet_id: %v",
+	log.Infof("action: send_fin | result: success | client_id: %v",
 		c.config.ID,
-		bet.BetID,
 	)
 
-	// Receive ACK from the server
-	ackPayload, err := receiveACK(c.conn)
+	// Receive Winners
+	winners, err := receiveWIN(c.conn)
 	if err != nil {
-		return false, err
+		return -1, err
 	}
 
-	log.Infof("ACK Received: %s | Expected ACK: ,%s,%d", ackPayload, bet.ClientID, bet.BetID)
-
-	// Check if the response is the expected ACK
-	if ackPayload == fmt.Sprintf(",%s,%d", bet.ClientID, bet.BetID) {
-		return true, nil
-	}
-
-	// If the response is not the correct ACK
-	return false, fmt.Errorf("unexpected response from server: %s", ackPayload)
+	return winners, nil
 }
 
 // SendBatch envía un lote de apuestas al servidor y devuelve true si todas las apuestas del lote fueron confirmadas correctamente.
@@ -123,7 +149,7 @@ func SendBatch(c *Client, bets []*Bet, batchID int) (bool, error) {
 		return false, err
 	}
 
-	log.Infof("ACK recibido: %s | ACK esperado: ,%s,%d", ackPayload, c.config.ID, batchID)
+	//log.Infof("ACK recibido: %s | ACK esperado: ,%s,%d", ackPayload, c.config.ID, batchID)
 
 	// Verificar si la respuesta es el ACK esperado
 	if ackPayload == fmt.Sprintf(",%s,%d", c.config.ID, batchID) {
@@ -137,9 +163,9 @@ func SendBatch(c *Client, bets []*Bet, batchID int) (bool, error) {
 // receiveACK receives and parses the ACK message from the server.
 func receiveACK(conn net.Conn) (string, error) {
 	// Read the header (ACK message) from the server
-	header := make([]byte, 8) // Header size is fixed at 8 bytes
+	header := make([]byte, HEADER_SIZE) // Header size is fixed at 8 bytes: 'ACK,' + 4 bytes of payload size
 	n, err := io.ReadFull(conn, header)
-	if err != nil || n < 8 {
+	if err != nil || n < HEADER_SIZE {
 		return "", err
 	}
 

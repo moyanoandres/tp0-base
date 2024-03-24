@@ -5,7 +5,9 @@ import signal
 import time
 
 from common.utils import *
-from common.communication import read_bet, send_confirmation
+from common.communication import read_bet, send_confirmation, get_header, send_winners
+
+NUMB_OF_AGENCIES = 5
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -15,17 +17,26 @@ class Server:
         self._server_socket.listen(listen_backlog)
         
         self._shutting_down = False
+
+        """
+        Los "sockets de los clientes que esperan resultados" son un subset de los sockets
+        activos, y se usan segun su ID para mandar los resultados del sorteo correspondiente
+        una vez que todos estén listos.
+        Los "sockets activos" son tanto los que esperan resultados, como el que esté abierto para
+        lectura o escritura en cada ciclo de server.run().
+        """
         self._active_client_sockets = []
+        self._client_socks_awaiting_results = {}
 
         signal.signal(signal.SIGTERM, self._handle_sigterm)
 
     def run(self):
         """
-        Dummy Server loop
+        Server loop
 
         Server that accept a new connections and establishes a
         communication with a client. After client with communucation
-        finishes, servers starts to accept new connections again
+        finishes, servers starts to accept new connections again.
         """
 
         while not self._shutting_down:
@@ -40,25 +51,42 @@ class Server:
 
     def __handle_client_connection(self, client_sock):
         """
-        Read message from a specific client socket and closes the socket
+        Read header from a specific client socket depending on the type of the
+        message perform an action:
+        BET -> load the bets received
+        FIN -> register this client as finished, and if all clients are, conduct the draw
 
-        If a problem arises in the communication with the client, the
-        client socket will also be closed
+        The client socket will only remain open if the client sent a FIN, and is awaiting
+        the results of the draw.
         """
+        will_await_results = False
         try:
-            logging.info(f'action: receive_bet | result: in_progress')
-            bets, batch_id = read_bet(client_sock)
-            if bets is not None:           
-                store_bets(bets)
-                logging.info(f'action: bets_stored | result: success | clientID: {bets[0].agency} | batchID: {batch_id}')
+            msg_type, header = get_header(client_sock)
 
-                send_confirmation(bets[0].agency, batch_id, client_sock)
+            if msg_type == 'BET':
+                logging.info(f'action: receive_and_store_bet | result: in_progress')
+                bets, batch_id = read_bet(client_sock, header)
+                if bets is not None:           
+                    store_bets(bets)
+                    logging.info(f'action: receive_and_store_bet | result: success | clientID: {bets[0].agency} | batchID: {batch_id}')
+
+                    send_confirmation(bets[0].agency, batch_id, client_sock)
+            elif msg_type == 'FIN':
+                will_await_results = True
+                clientID = int(header[9:])
+                logging.info(f'action: receive_fin | result: success | clientID: {clientID}')
+                self._client_socks_awaiting_results[clientID] = client_sock
+                if len(self._client_socks_awaiting_results) >= 5: #Todos los clientes notificaron al sv
+                    self._conduct_draw()
+            else:
+                logging.error("action: receive_message | result: fail | error: Unknown type message received")
         except OSError as e:
             if not self._shutting_down:
                 logging.error("action: receive_message | result: fail | error: {e}")
         finally:
-            client_sock.close()
-            self._active_client_sockets.remove(client_sock)
+            if not will_await_results:
+                client_sock.close()
+                self._active_client_sockets.remove(client_sock)
 
     def __accept_new_connection(self):
         """
@@ -78,6 +106,27 @@ class Server:
                 logging.error("action: accept_connections | result: fail | error: {e}")
             return None
 
+    def _conduct_draw(self):
+        #find and save winners by agency
+        winners_by_agency = [[] for _ in range(NUMB_OF_AGENCIES)]
+        for bet in load_bets():
+            if has_won(bet):
+                winners_by_agency[bet.agency - 1].append(bet.document)
+
+        #send winners to their respective agency
+        logging.info(f'action: send_winners | result: in_progress')
+        for i in range(0, len(winners_by_agency)):
+            send_winners(self._client_socks_awaiting_results[i + 1], winners_by_agency[i])
+        logging.info(f'action: send_winners | result: success')
+
+        #close sockets and cleanup
+        for socket in self._active_client_sockets:
+            socket.close()
+            self._active_client_sockets = []
+        for socket in self._client_socks_awaiting_results:
+            #no hace falta cerrar en este caso porque son los mismos que _active_client_sockets
+            self._client_socks_awaiting_results = {}
+                
 
     def _handle_sigterm(self, signum, frame):
         logging.info(f'action: Shutdown | result: in_progress')

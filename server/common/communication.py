@@ -1,14 +1,30 @@
 import logging
 from common.utils import Bet
 
-def read_bet(client_sock):
+HEADER_SIZE = 13
+
+def get_header(client_sock):
     try:
         #Read header (13bytes "BET" + 4 bytes for payload size + 2 bytes for batchsize + 4 bytes for batchID)
-        header = client_sock.recv(13)
-        if len(header) != 13:
-            logging.error("Failed to read header.")
-            return None, None
+        #or          (13bytes "FIN" + clientID + padding)
+        header = b''
+        while len(header) < HEADER_SIZE:
+            chunk = client_sock.recv(HEADER_SIZE - len(header))
+            if not chunk:
+                logging.error("Failed to read header.")
+                return None, None
+            header += chunk
+            
         header = header.decode('utf-8')
+        msg_type = header[:3]
+        return msg_type, header
+
+    except Exception as e: 
+        logging.error(f"Error reading header: {e}")
+        return None, None
+    
+def read_bet(client_sock, header):
+    try:
 
         msg_type = header[:3]
         if msg_type != 'BET':
@@ -80,3 +96,26 @@ def send_confirmation(agency, batch_id, client_sock):
     except Exception as e:
         logging.error(f"Error sending confirmation: {e}")
         return None, None
+
+
+def send_winners(client_sock, winners):
+    try:
+        payload = f''
+        for winner in winners:
+            payload += winner
+            payload += ','
+
+        payload = payload[:-1]
+
+        payload_size = len(payload)
+        payload_size_str = f"{payload_size:04d}"
+        message = f"WIN,{payload_size_str}".encode('utf-8') + payload.encode('utf-8')
+
+        total_sent = 0
+        while total_sent < len(message):
+            sent = client_sock.send(message[total_sent:])
+            if sent == 0:
+                raise RuntimeError("Socket connection broken")
+            total_sent += sent
+    except Exception as e:
+        logging.error(f"Error sending confirmation: {e}")
