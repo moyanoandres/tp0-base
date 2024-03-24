@@ -72,6 +72,69 @@ func SendBet(c *Client, bet Bet) (bool, error) {
 	return false, fmt.Errorf("unexpected response from server: %s", ackPayload)
 }
 
+// SendBatch envía un lote de apuestas al servidor y devuelve true si todas las apuestas del lote fueron confirmadas correctamente.
+func SendBatch(c *Client, bets []*Bet, batchID int) (bool, error) {
+	//socket creation and graceful shutdown handling
+	err := c.createClientSocket()
+	if err != nil {
+		return false, err
+	}
+	if c.shuttingDown {
+		c.conn.Close()
+		return false, err
+	}
+	// Crear el mensaje con su encabezado a partir de las apuestas recibidas
+	payload := ""
+	for _, bet := range bets {
+		payload += fmt.Sprintf(";%s,%d,%s,%s,%s,%s,%s", bet.ClientID, bet.BetID, bet.Name, bet.Surname, bet.DNI, bet.Birthdate, bet.Number)
+	}
+
+	// BET PAYLOAD_SIZE BATCHSIZE BatchID PAYLOAD
+	message := fmt.Sprintf("BET%04d%02d%04d%s", len(payload), len(bets), batchID, payload)
+
+	log.Infof("Bet message being sent: %v", message)
+
+	// Enviar el mensaje al servidor
+	log.Infof("action: send_batch | result: in_progress | client_id: %v | batch_id: %v",
+		c.config.ID,
+		batchID,
+	)
+
+	message += "\n"
+	sentBytes := 0
+	for sentBytes < len(message) {
+		n, err := fmt.Fprintf(c.conn, message[sentBytes:])
+		if err != nil {
+			return false, err
+		}
+		if n == 0 {
+			return false, fmt.Errorf("conexión cerrada por el host remoto")
+		}
+		sentBytes += n
+	}
+
+	log.Infof("action: send_batch | result: success | client_id: %v | batch_id: %v",
+		c.config.ID,
+		batchID,
+	)
+
+	// Recibir ACK del servidor
+	ackPayload, err := receiveACK(c.conn)
+	if err != nil {
+		return false, err
+	}
+
+	log.Infof("ACK recibido: %s | ACK esperado: ,%s,%d", ackPayload, c.config.ID, batchID)
+
+	// Verificar si la respuesta es el ACK esperado
+	if ackPayload == fmt.Sprintf(",%s,%d", c.config.ID, batchID) {
+		return true, nil
+	}
+
+	// Si la respuesta no es el ACK correcto
+	return false, fmt.Errorf("respuesta inesperada del servidor: %s", ackPayload)
+}
+
 // receiveACK receives and parses the ACK message from the server.
 func receiveACK(conn net.Conn) (string, error) {
 	// Read the header (ACK message) from the server

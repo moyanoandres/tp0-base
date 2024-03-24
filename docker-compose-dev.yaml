@@ -13,17 +13,13 @@ services:
     entrypoint: /client
     environment:
     - CLI_ID=1
-    - Name=client1_Name
-    - Surname=client1_Surname
-    - DNI=client1_DNI
-    - Birthdate=2000-10-01
-    - Number=1231
     - CLI_LOG_LEVEL=DEBUG
     image: client:latest
     networks:
     - testing_net
     volumes:
     - ./client/config.yaml:/config.yaml
+    - ./data/agency-1.csv:/data/agency.csv
   client2:
     container_name: client2
     depends_on:
@@ -31,17 +27,13 @@ services:
     entrypoint: /client
     environment:
     - CLI_ID=2
-    - Name=client2_Name
-    - Surname=client2_Surname
-    - DNI=client2_DNI
-    - Birthdate=2000-10-02
-    - Number=1232
     - CLI_LOG_LEVEL=DEBUG
     image: client:latest
     networks:
     - testing_net
     volumes:
     - ./client/config.yaml:/config.yaml
+    - ./data/agency-2.csv:/data/agency.csv
   client3:
     container_name: client3
     depends_on:
@@ -49,17 +41,41 @@ services:
     entrypoint: /client
     environment:
     - CLI_ID=3
-    - Name=client3_Name
-    - Surname=client3_Surname
-    - DNI=client3_DNI
-    - Birthdate=2000-10-03
-    - Number=1233
     - CLI_LOG_LEVEL=DEBUG
     image: client:latest
     networks:
     - testing_net
     volumes:
     - ./client/config.yaml:/config.yaml
+    - ./data/agency-3.csv:/data/agency.csv
+  client4:
+    container_name: client4
+    depends_on:
+    - server
+    entrypoint: /client
+    environment:
+    - CLI_ID=4
+    - CLI_LOG_LEVEL=DEBUG
+    image: client:latest
+    networks:
+    - testing_net
+    volumes:
+    - ./client/config.yaml:/config.yaml
+    - ./data/agency-4.csv:/data/agency.csv
+  client5:
+    container_name: client5
+    depends_on:
+    - server
+    entrypoint: /client
+    environment:
+    - CLI_ID=5
+    - CLI_LOG_LEVEL=DEBUG
+    image: client:latest
+    networks:
+    - testing_net
+    volumes:
+    - ./client/config.yaml:/config.yaml
+    - ./data/agency-5.csv:/data/agency.csv
   server:
     container_name: server
     entrypoint: python3 /main.py

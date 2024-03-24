@@ -34,7 +34,6 @@ class Server:
                 self._active_client_sockets.append(client_sock)
                 self.__handle_client_connection(client_sock)
         
-        #logging.info(f'closing server_socket')
         self._server_socket.close()
         logging.info(f'action: Shutdown | result: success')
         
@@ -48,15 +47,12 @@ class Server:
         """
         try:
             logging.info(f'action: receive_bet | result: in_progress')
-            bets, bet_id = read_bet(client_sock)
-            if bets is None:
-                logging.info(f'RAISING')
-                raise Exception
-            
-            store_bets(bets)
-            logging.info(f'action: bet_stored | result: success | dni: {bets[0].document} | numero: {bets[0].number}')
+            bets, batch_id = read_bet(client_sock)
+            if bets is not None:           
+                store_bets(bets)
+                logging.info(f'action: bets_stored | result: success | clientID: {bets[0].agency} | batchID: {batch_id}')
 
-            send_confirmation(bets[0], bet_id, client_sock)
+                send_confirmation(bets[0].agency, batch_id, client_sock)
         except OSError as e:
             if not self._shutting_down:
                 logging.error("action: receive_message | result: fail | error: {e}")

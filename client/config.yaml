@@ -6,3 +6,5 @@ loop:
   period: "5s"
 log:
   level: "info"
+packet:
+  batchsize: "5"

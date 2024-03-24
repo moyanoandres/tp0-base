@@ -61,3 +61,18 @@ El formato del payload dependerá del tipo de mensaje, para un mensaje BET es:  
 
 Tanto la aplicacion servidor como cliente tienen un nuevo archivo common/communication.xx, con la responsabilidad de manejar la interpretación de los mensajes según el protocolo, y de leer y escribir adecuadamente todo el mensaje.   
 
+## Ej 6:
+
+El protocolo de envío y recepción de mensajes fue cambiado para soportar mensajes BET con un batch de apuestas en vez de una sola, el nuevo formato para BET es:    
+
+[HEADER];[PAYLOAD]  
+
+donde [HEADER] := BET[PAYLOAD_SIZE][BATCH_SIZE][BATCH_ID]   
+con un tamaño fijo de 13 bytes, 3 del tipo de mensaje 'BET', 4 de payload size, 2 de batch size, y 4 de batch id    
+
+y payload := [APUESTA1];[APUESTA2];[APUESTA3];...   
+donde cada apuesta tiene el mismo formato que cuando se mandaba una sola, definido en el Ej5.   
+
+Ahora cada cliente tiene un volume de docker con su respectivo archivo csv en el sistema host, y tiene el valor batchsize configurable en client/config.yaml. El cliente lee de a batchsize entries del archivo, crea un array de apuestas y le delega el envío y recepción de confirmación al módulo de comunicación. Este se encarga de formatear el mensaje y colocarle su correspondiente header y de interpretar la respuesta del servidor.    
+
+El servidor ahora interpreta los mensajes de tipo BET en su módulo de comunicación y devuelve un ACK al cliente si todas las apuestas de ese mensaje pudieron ser parseadas correctamente (y si estas son la misma cantidad que indicaba el header del mensaje que fueron enviadas).

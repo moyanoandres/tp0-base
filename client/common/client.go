@@ -1,9 +1,12 @@
 package common
 
 import (
+	"encoding/csv"
+	"io"
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -27,6 +30,7 @@ type ClientConfig struct {
 	ServerAddress string
 	LoopLapse     time.Duration
 	LoopPeriod    time.Duration
+	BatchSize     string
 }
 
 // Client Entity that encapsulates how
@@ -47,9 +51,19 @@ func NewClient(config ClientConfig) *Client {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
+	file, err := os.Open("/data/agency.csv")
+	if err != nil {
+		log.Fatalf("error opening agency file: %v", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+
 	// autoincremental msgID to identify every message sent
+	batchID := 1
 	betID := 1
 
+	// SIGTERM handling
 	sigchnl := make(chan os.Signal, 1)
 	signal.Notify(sigchnl, syscall.SIGTERM)
 
@@ -77,43 +91,63 @@ loop:
 			break loop
 		}
 
-		bet := Bet{
-			ClientID:  c.config.ID,
-			BetID:     betID,
-			Name:      os.Getenv("Name"),
-			Surname:   os.Getenv("Surname"),
-			DNI:       os.Getenv("DNI"),
-			Birthdate: os.Getenv("Birthdate"),
-			Number:    os.Getenv("Number"),
+		// batch reading from file
+		batchsize, err := strconv.Atoi(c.config.BatchSize)
+		if err != nil {
+			log.Errorf("Error converting batch size to integer: %v", err)
+			break
 		}
 
-		result, err := SendBet(c, bet)
+		bets := make([]*Bet, 0)
+		for i := 0; i < batchsize; i++ {
+			record, err := reader.Read()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				log.Fatalf("error reading record from CSV: %v", err)
+			}
+
+			bet := &Bet{
+				ClientID:  c.config.ID,
+				BetID:     betID,
+				Name:      record[0],
+				Surname:   record[1],
+				DNI:       record[2],
+				Birthdate: record[3],
+				Number:    record[4],
+			}
+			bets = append(bets, bet)
+			betID++
+		}
+
+		result, err := SendBatch(c, bets, batchID)
 		if c.shuttingDown {
 			c.conn.Close()
 			return
 		}
 		if err != nil {
-			log.Errorf("action: send_bet | result: fail | client_id: %v | bet_id: %v | error: %v",
+			log.Errorf("action: send_bet | result: fail | client_id: %v | batch_id: %v | error: %v",
 				c.config.ID,
-				betID,
+				batchID,
 				err,
 			)
 			break loop
 		}
 
 		if result {
-			log.Infof("action: receive_confirmation | result: success | client_id: %v | bet_id: %v",
+			log.Infof("action: receive_confirmation | result: success | client_id: %v | batch_id: %v",
 				c.config.ID,
-				betID,
+				batchID,
 			)
 		} else {
-			log.Infof("action: receive_confirmation | result: fail | client_id: %v | bet_id: %v",
+			log.Infof("action: receive_confirmation | result: fail | client_id: %v | batch_id: %v",
 				c.config.ID,
-				betID,
+				batchID,
 			)
 		}
 
-		betID++
+		batchID++
 		c.conn.Close()
 
 		// Wait a time between sending one message and the next one
