@@ -4,6 +4,8 @@ import signal
 
 import time
 
+from common.utils import *
+from common.communication import read_bet, send_confirmation
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -45,12 +47,16 @@ class Server:
         client socket will also be closed
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
-            addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
+            logging.info(f'action: receive_bet | result: in_progress')
+            bets, bet_id = read_bet(client_sock)
+            if bets is None:
+                logging.info(f'RAISING')
+                raise Exception
+            
+            store_bets(bets)
+            logging.info(f'action: bet_stored | result: success | dni: {bets[0].document} | numero: {bets[0].number}')
+
+            send_confirmation(bets[0], bet_id, client_sock)
         except OSError as e:
             if not self._shutting_down:
                 logging.error("action: receive_message | result: fail | error: {e}")

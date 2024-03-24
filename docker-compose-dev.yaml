@@ -13,6 +13,11 @@ services:
     entrypoint: /client
     environment:
     - CLI_ID=1
+    - Name=client1_Name
+    - Surname=client1_Surname
+    - DNI=client1_DNI
+    - Birthdate=2000-10-01
+    - Number=1231
     - CLI_LOG_LEVEL=DEBUG
     image: client:latest
     networks:
@@ -26,6 +31,11 @@ services:
     entrypoint: /client
     environment:
     - CLI_ID=2
+    - Name=client2_Name
+    - Surname=client2_Surname
+    - DNI=client2_DNI
+    - Birthdate=2000-10-02
+    - Number=1232
     - CLI_LOG_LEVEL=DEBUG
     image: client:latest
     networks:
@@ -39,6 +49,11 @@ services:
     entrypoint: /client
     environment:
     - CLI_ID=3
+    - Name=client3_Name
+    - Surname=client3_Surname
+    - DNI=client3_DNI
+    - Birthdate=2000-10-03
+    - Number=1233
     - CLI_LOG_LEVEL=DEBUG
     image: client:latest
     networks:

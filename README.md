@@ -45,4 +45,19 @@ El servidor mantiene en su estado el socket asociado al cliente (si hubiera una 
 
 El cliente mantiene en su estado al socket que corresponde a su conexión. Antes de inicial el loop de ejecución, se crea un channel para la señal SIGTERM y se inicia una goroutine esperando la llegada de la señal al channel. Si se recibe la señal, el cliente setea su flag shuttingDown en true y si cierra el socket si estuviera abierto. Nuevamente, si esto sucediera durante operaciones del socket, el retorno de err sería distinto de nil, y se procede con el shutdown. El programa avanza hasta el final del ciclo acutal y cierra el socket si fuera necesatrio, pero no inicia un nuevo ciclo y finaliza. 
 
+## Ej5:
+
+Para el nuevo caso de uso de lotería, los mensajes que envían los clientes (que ahora cumplen el rol de agencias) y el servidor (que ahora cumplen el rol de lotería nacional) son de acuerdo al protocolo que definí:  
+
+[HEADER],[PAYLOAD]  
+
+donde [HEADER] := [TIPO_MENSAJE],[TAMAÑO_PAYLOAD]   
+
+El header de los mensajes tiene un tamaño fijo de 8 bytes, 3 para el tipo de mensaje, una coma, y 4 para el tamaño del payload  
+
+TIPO_MENSAJE puede ser BET o ACK. BET corresponde a un cliente solicitando el registro de una apuesta y ACK es la confirmación del servidor al cliente de que la apuesta se almacenó correctamente. 
+
+El formato del payload dependerá del tipo de mensaje, para un mensaje BET es:   [agencia],[betID],[nombre],[apellido],[DNI],[Fecha],[Numero]    
+
+Tanto la aplicacion servidor como cliente tienen un nuevo archivo common/communication.xx, con la responsabilidad de manejar la interpretación de los mensajes según el protocolo, y de leer y escribir adecuadamente todo el mensaje.   
 

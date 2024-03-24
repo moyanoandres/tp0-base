@@ -55,6 +55,11 @@ def create_compose_file(data, filename, number_of_clients):
             "entrypoint": "/client",
             "environment": [
                 f"CLI_ID={i}",
+                f"Name={client_name}_Name",
+                f"Surname={client_name}_Surname",
+                f"DNI={client_name}_DNI",
+                f"Birthdate=2000-10-0{i}",
+                f"Number=123{i}",
                 "CLI_LOG_LEVEL=DEBUG"
             ],
             "networks": ["testing_net"],
