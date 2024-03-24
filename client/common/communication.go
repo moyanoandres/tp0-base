@@ -91,8 +91,7 @@ func SendBatch(c *Client, bets []*Bet, batchID int) (bool, error) {
 
 	// BET PAYLOAD_SIZE BATCHSIZE BatchID PAYLOAD
 	message := fmt.Sprintf("BET%04d%02d%04d%s", len(payload), len(bets), batchID, payload)
-
-	log.Infof("Bet message being sent: %v", message)
+	//log.Infof("Bet message being sent: %v", message)
 
 	// Enviar el mensaje al servidor
 	log.Infof("action: send_batch | result: in_progress | client_id: %v | batch_id: %v",

@@ -32,7 +32,7 @@ def read_bet(client_sock):
 
         msg = payload.decode('utf-8')
         msg = msg[:-1] #Remove trailing \n
-        logging.info(f'action: receive_bet | result: success | message_received: %s;%s', header,msg)
+        #logging.info(f'action: receive_bet | result: success | message_received: %s;%s', header,msg)
 
         bets_str = msg.split(';')
         if len(bets_str) != batchsize:

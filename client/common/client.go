@@ -77,16 +77,8 @@ func (c *Client) StartClientLoop() {
 	}()
 
 loop:
-	// Send messages if the loopLapse threshold has not been surpassed
-	for timeout := time.After(c.config.LoopLapse); ; {
-		select {
-		case <-timeout:
-			log.Infof("action: timeout_detected | result: success | client_id: %v",
-				c.config.ID,
-			)
-			break loop
-		default:
-		}
+	// Send messages until EOF
+	for {
 		if c.shuttingDown {
 			break loop
 		}
@@ -121,13 +113,21 @@ loop:
 			betID++
 		}
 
+		if len(bets) == 0 {
+			log.Infof("action: finished_loading_file | result: success | client_id: %v | final_batch_id: %v",
+				c.config.ID,
+				batchID-1,
+			)
+			break loop
+		}
+
 		result, err := SendBatch(c, bets, batchID)
 		if c.shuttingDown {
 			c.conn.Close()
 			return
 		}
 		if err != nil {
-			log.Errorf("action: send_bet | result: fail | client_id: %v | batch_id: %v | error: %v",
+			log.Errorf("action: send_batch | result: fail | client_id: %v | batch_id: %v | error: %v",
 				c.config.ID,
 				batchID,
 				err,
@@ -151,7 +151,7 @@ loop:
 		c.conn.Close()
 
 		// Wait a time between sending one message and the next one
-		time.Sleep(c.config.LoopPeriod)
+		//time.Sleep(c.config.LoopPeriod)
 	}
 
 	log.Infof("action: Shutdown | result: success | client_id: %v", c.config.ID)
