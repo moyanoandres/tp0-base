@@ -89,3 +89,18 @@ Cada vez que el servidor maneja una nueva conexión aceptada, solicita el header
 
 El cliente una vez que manda FIN espera recibir WIN de parte del servidor con los DNIs ganadores de su agencia y tras recibirlos, libera los recursos y concluye su ejecución.
 
+## EJ 8:
+
+### Consideraciones Generales
+
+El servidor funciona en muchos aspectos como lo hacía antes, el thread principal acepta conexiones, y crea un nuevo thread para cada una que se recibe. Estos threads viven para el procesamiento del mensaje que se recibe y el envío de la respuesta al cliente. Cuando uno de estos threads recibe el mensaje FIN de parte del cliente, almacena el socket por el que el cliente esperará la respuesta en el estado del servidor y muere. El enésimo thread que reciba el mensaje FIN, siendo n la cantidad de agencias, realizará el sorteo y le enviará a los clientes sus ganadores. De esta manera se asegura el sincronismo del envío de los mensajes WIN a los clientes.
+
+### Multithreading vs Multiprocessing
+
+Considerando que el Global Interpreter Lock de Python no permite que varios hilos se ejecuten verdaderamente en paralelo en múltiples núcleos de CPU, reduciendo la eficiencia de las operaciones computacionales paralelizables, pense al principio en encarar el problema con multiprocessing.    
+
+Por como fui programando el trabajo en puntos anteriores y la lógica que ya había hecho me resultó mucho más fácil implementar una solución multithread que una multiprocessing en la que probablemente haya tenido que definir un protocolo de mediana complejidad para IPC, o refactorizar básicamente todo. Para tomar la decisión final, también consideré que muchas de las operaciones que realiza el servidor son de lectura y escritura en sockets, que pueden implicar mucha espera según la conexión, y que aunque hubiera usado multiprocessing, como la persistencia de los datos no es process-safe, igualmente deberían esperar a que otros procesos liberen el storage para poder operar sobre él, es decir, hay cierto grado de concurrencia que justifica el uso de threads (que son más livianos que procesos) para resolver el problema.
+
+### Exclusión Mutua
+
+Para todos los recursos compartidos que precisa el manejo de conexión con el cliente, usé locks. Uno de los locks es para el acceso a almacenamiento mediante las funciones de utils.py y los demás son para el estado del servidor. Cuando un thread precisa usar uno de los recursos, pide el lock, y cuando finaliza su uso, lo libera.    

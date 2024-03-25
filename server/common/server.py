@@ -1,6 +1,7 @@
 import socket
 import logging
 import signal
+import threading
 
 import time
 
@@ -22,11 +23,16 @@ class Server:
         Los "sockets de los clientes que esperan resultados" son un subset de los sockets
         activos, y se usan segun su ID para mandar los resultados del sorteo correspondiente
         una vez que todos estén listos.
-        Los "sockets activos" son tanto los que esperan resultados, como el que esté abierto para
-        lectura o escritura en cada ciclo de server.run().
+        Los "sockets activos" son tanto los que esperan resultados, como los que estén abiertos para
+        envío o recepción de mensajes.
         """
         self._active_client_sockets = []
         self._client_socks_awaiting_results = {}
+
+        # Locks
+        self._sotrage_lock = threading.Lock()
+        self._active_client_lock = threading.Lock()
+        self._awaiting_results_client_lock = threading.Lock()
 
         signal.signal(signal.SIGTERM, self._handle_sigterm)
 
@@ -42,8 +48,9 @@ class Server:
         while not self._shutting_down:
             client_sock = self.__accept_new_connection()
             if client_sock is not None:
-                self._active_client_sockets.append(client_sock)
-                self.__handle_client_connection(client_sock)
+                with self._active_client_lock:
+                    self._active_client_sockets.append(client_sock)
+                threading.Thread(target=self.__handle_client_connection, args=(client_sock,)).start()
         
         self._server_socket.close()
         logging.info(f'action: Shutdown | result: success')
@@ -59,6 +66,7 @@ class Server:
         The client socket will only remain open if the client sent a FIN, and is awaiting
         the results of the draw.
         """
+
         will_await_results = False
         try:
             msg_type, header = get_header(client_sock)
@@ -66,27 +74,30 @@ class Server:
             if msg_type == 'BET':
                 logging.info(f'action: receive_and_store_bet | result: in_progress')
                 bets, batch_id = read_bet(client_sock, header)
-                if bets is not None:           
-                    store_bets(bets)
-                    logging.info(f'action: receive_and_store_bet | result: success | clientID: {bets[0].agency} | batchID: {batch_id}')
-
+                if bets is not None:
+                    with self._sotrage_lock:    # bloquear hasta garantizar exclusion para el uso del almacenamiento      
+                        store_bets(bets)
+                        logging.info(f'action: receive_and_store_bet | result: success | clientID: {bets[0].agency} | batchID: {batch_id}')
                     send_confirmation(bets[0].agency, batch_id, client_sock)
             elif msg_type == 'FIN':
                 will_await_results = True
                 clientID = int(header[9:])
                 logging.info(f'action: receive_fin | result: success | clientID: {clientID}')
-                self._client_socks_awaiting_results[clientID] = client_sock
-                if len(self._client_socks_awaiting_results) >= 5: #Todos los clientes notificaron al sv
-                    self._conduct_draw()
+                with self._awaiting_results_client_lock:
+                    self._client_socks_awaiting_results[clientID] = client_sock
+                    if len(self._client_socks_awaiting_results) >= NUMB_OF_AGENCIES: #Todos los clientes notificaron al sv
+                        self._conduct_draw()
             else:
-                logging.error("action: receive_message | result: fail | error: Unknown type message received")
-        except OSError as e:
+                logging.error(f"action: receive_message | result: fail | error: Unknown type message received")
+
+        except Exception as e:
             if not self._shutting_down:
-                logging.error("action: receive_message | result: fail | error: {e}")
+                logging.error(f"action: receive_message | result: fail | error: {e}")
         finally:
             if not will_await_results:
-                client_sock.close()
-                self._active_client_sockets.remove(client_sock)
+                with self._active_client_lock:
+                    client_sock.close()
+                    self._active_client_sockets.remove(client_sock)
 
     def __accept_new_connection(self):
         """
@@ -96,22 +107,23 @@ class Server:
         Then connection created is printed and returned
         """
 
-        logging.info('action: accept_connections | result: in_progress')
+        logging.info(f'action: accept_connections | result: in_progress')
         try:
             c, addr = self._server_socket.accept()
             logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
             return c
         except OSError as e:
             if not self._shutting_down:
-                logging.error("action: accept_connections | result: fail | error: {e}")
+                logging.error(f"action: accept_connections | result: fail | error: {e}")
             return None
 
     def _conduct_draw(self):
         #find and save winners by agency
         winners_by_agency = [[] for _ in range(NUMB_OF_AGENCIES)]
-        for bet in load_bets():
-            if has_won(bet):
-                winners_by_agency[bet.agency - 1].append(bet.document)
+        with self._sotrage_lock:
+            for bet in load_bets():
+                if has_won(bet):
+                    winners_by_agency[bet.agency - 1].append(bet.document)
 
         #send winners to their respective agency
         logging.info(f'action: send_winners | result: in_progress')
@@ -120,12 +132,14 @@ class Server:
         logging.info(f'action: send_winners | result: success')
 
         #close sockets and cleanup
-        for socket in self._active_client_sockets:
-            socket.close()
+        with self._active_client_lock:
+            for socket in self._active_client_sockets:
+                socket.close()
             self._active_client_sockets = []
-        for socket in self._client_socks_awaiting_results:
-            #no hace falta cerrar en este caso porque son los mismos que _active_client_sockets
-            self._client_socks_awaiting_results = {}
+
+        #no hace falta cerrar en este caso porque son los mismos que _active_client_sockets
+        #el lock correspondiente es tomado antes de la llamada a esta función
+        self._client_socks_awaiting_results = {}
                 
 
     def _handle_sigterm(self, signum, frame):
@@ -133,5 +147,6 @@ class Server:
         self._shutting_down = True
 
         self._server_socket.shutdown(socket.SHUT_RDWR)
-        for client_sock in self._active_client_sockets:
-            client_sock.shutdown(socket.SHUT_RDWR)
+        with self._active_client_lock:
+            for client_sock in self._active_client_sockets:
+                client_sock.shutdown(socket.SHUT_RDWR)

@@ -11,7 +11,7 @@ def get_header(client_sock):
         while len(header) < HEADER_SIZE:
             chunk = client_sock.recv(HEADER_SIZE - len(header))
             if not chunk:
-                logging.error("Failed to read header.")
+                logging.error(f"Failed to read header.")
                 return None, None
             header += chunk
             
@@ -28,7 +28,7 @@ def read_bet(client_sock, header):
 
         msg_type = header[:3]
         if msg_type != 'BET':
-            logging.error("Incorrect message type received | expected: %s | received: %s", "BET", msg_type)
+            logging.error(f"Incorrect message type received | expected: %s | received: %s", "BET", msg_type)
             return None, None
 
         payload_size = int(header[3:7])
@@ -42,7 +42,7 @@ def read_bet(client_sock, header):
         while len(payload) < payload_size:
             chunk = client_sock.recv(payload_size - len(payload))
             if not chunk:
-                logging.error("Failed to read payload.")
+                logging.error(f"Failed to read payload.")
                 return None, batchID
             payload += chunk
 
@@ -52,14 +52,14 @@ def read_bet(client_sock, header):
 
         bets_str = msg.split(';')
         if len(bets_str) != batchsize:
-            logging.error("Incorrect message format| expected batches: %s | received: %s", batchsize, len(bets_str))
+            logging.error(f"Incorrect message format| expected batches: %s | received: %s", batchsize, len(bets_str))
             return None, batchID
 
         bets = []
         for bet_str in bets_str:
             parts = bet_str.split(',')
             if len(parts) != 7:
-                logging.error("Bet cannot be processed")
+                logging.error(f"Bet cannot be processed")
                 return None, batchID
             
             bet_id = parts[1]
