@@ -7,4 +7,4 @@ loop:
 log:
   level: "info"
 packet:
-  batchsize: "50"
+  batchsize: "70"

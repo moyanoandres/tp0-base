@@ -1,12 +1,12 @@
 import logging
 from common.utils import Bet
 
-HEADER_SIZE = 13
+HEADER_SIZE = 23
 
 def get_header(client_sock):
     try:
-        #Read header (13bytes "BET" + 4 bytes for payload size + 2 bytes for batchsize + 4 bytes for batchID)
-        #or          (13bytes "FIN" + clientID + padding)
+        #Read header (23bytes "BET" + 8 bytes for payload size + 4 bytes for batchsize + 8 bytes for batchID)
+        #or          (23bytes "FIN" + clientID + padding)
         header = b''
         while len(header) < HEADER_SIZE:
             chunk = client_sock.recv(HEADER_SIZE - len(header))
@@ -31,9 +31,9 @@ def read_bet(client_sock, header):
             logging.error(f"Incorrect message type received | expected: %s | received: %s", "BET", msg_type)
             return None, None
 
-        payload_size = int(header[3:7])
-        batchsize = int(header[7:9])
-        batchID = int(header[9:13])
+        payload_size = int(header[3:11])
+        batchsize = int(header[11:15])
+        batchID = int(header[15:23])
 
         client_sock.recv(1).decode('utf-8') #read coma
 
@@ -84,7 +84,7 @@ def send_confirmation(agency, batch_id, client_sock):
     try:
         payload = f'{agency},{batch_id}\n'.encode('utf-8')
         payload_size = len(payload)
-        payload_size_str = f"{payload_size:04d}"
+        payload_size_str = f"{payload_size:08d}"
         message = f"ACK,{payload_size_str},".encode('utf-8') + payload
 
         total_sent = 0
@@ -108,7 +108,7 @@ def send_winners(client_sock, winners):
         payload = payload[:-1]
 
         payload_size = len(payload)
-        payload_size_str = f"{payload_size:04d}"
+        payload_size_str = f"{payload_size:08d}"
         message = f"WIN,{payload_size_str}".encode('utf-8') + payload.encode('utf-8')
 
         total_sent = 0

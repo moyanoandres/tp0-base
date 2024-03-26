@@ -1,5 +1,9 @@
 # TP0: Docker + Comunicaciones + Concurrencia
 
+# IMPORTANTE
+
+Del ejercicio 6 en adelante había un error si se elegía un batchsize muy chico para archivos muy grandes, o un batchsize muy grande para cualquier tipo de archivo. De este error me di cuenta más adelante en el TP y lo corregí. El protocolo corregido está [acá](#protocolo-versión-final). Descontando el aumento del tamaño de los headers, todo lo que dice en los respectivos apartados de los ejercicios no tuvo cambios.
+
 ## Ej1:
 
 El script creado para la creación del DockerCompose con clientes configurables es compose_maker.py 
@@ -104,3 +108,43 @@ Por como fui programando el trabajo en puntos anteriores y la lógica que ya hab
 ### Exclusión Mutua
 
 Para todos los recursos compartidos que precisa el manejo de conexión con el cliente, usé locks. Uno de los locks es para el acceso a almacenamiento mediante las funciones de utils.py y los demás son para el estado del servidor. Cuando un thread precisa usar uno de los recursos, pide el lock, y cuando finaliza su uso, lo libera.    
+
+## Protocolo Versión Final 
+
+El protocolo final del TP en funcionalidad es equivalente a lo mencionado en puntos anteriores, pero ahora el tamaño de los headers es mayor, los mensajes que envía el servidor al cliente (ACK, WIN) tienen un header fijo de 12 bytes y los mensajes que envía el cliente al servidor (BET, FIN) tienen un header fijo de 23 bytes.
+
+### Mensaje de tipo ACK
+
+ACK := [HEADER_ACK];[PAYLOAD_ACK]   
+HEADER_ACK := ACK,[PAYLOAD_SIZE]    
+PAYLOAD_ACK := [AGENCY_ID],[BATCH_ID]   
+
+El servidor responde a los mensajes de tipo BET enviados por el cliente con un mensaje ACK, confirmando el batch de apuestas que envió el cliente. [PAYLOAD_SIZE] tiene un tamaño fijo de 8 bytes, por lo que [HEADER_ACK] tiene un tamaño fijo de 12 bytes (3 de 'ACK', 1 de ',' y 4 de [PAYLOAD_SIZE]).
+
+### Mensaje de tipo WIN
+
+WIN := [HEADER_WIN];[PAYLOAD_WIN]   
+HEADER_WIN := WIN,[PAYLOAD_SIZE]    
+PAYLOAD_WIN:= [DNI_1],[DNI_2],[DNI_3],...   
+
+Una vez que el servidor recibe mensajes de tipo FIN de todas las agencias, les envía los DNIs de sus ganadores correspondientes empaquetado en un mensaje WIN. [PAYLOAD_SIZE] tiene un tamaño fijo de 8 bytes, por lo que [HEADER_WIN] tiene un tamaño fijo de 12 bytes.
+
+### Mensaje de tipo BET
+
+BET := [HEADER_BET];[PAYLOAD_BET]   
+[HEADER_BET] := BET[PAYLOAD_SIZE][BATCH_SIZE][BATCH_ID] 
+[PAYLOAD_BET] := [APUESTA_1],[APUESTA_2],[APUESTA_3],...    
+[APUESTA] := [agencia],[betID],[nombre],[apellido],[DNI],[Fecha],[Numero]   
+
+El cliente envía mensajes de tipo BET para registrar una tanda de apuestas. En su header incluye la cantidad de apuestas que envía [BATCHSIZE], el ID del batch para el que esperará recibir un ACK, y el tamaño del payload de las apuestas en sí. Para el header bet: [PAYLOAD_SIZE] tiene un tamaño fijo de 8 bytes, [BATCH_SIZE] de 4 bytes, y [BATCH_ID] de 8 bytes; por lo que el header tiene un tamaño fijo total de 23 bytes.
+
+### Mensaje de tipo FIN
+
+FIN := FIN[AGENCY_ID]
+
+El cliente envía mensaje de tipo fin para indicar que ya envió todas las apuestas y que espera un mensaje de tipo WIN para recibir los DNIs de sus ganadores. [AGENCY_ID] tiene un tamaño fijo de 20 bytes, que implcia que FIN tiene un tamaño fijo de 23 bytes, esto es util porque el servidor al leer los primeros 23 bytes de un mensaje recibido, o ya tiene toda la información relevante para handlear un mensaje FIN, o procede con el manejo de un mensaje BET.   
+Cuando el servidor recibe mensajes FIN de todas las agencias, revisa los ganadores y envía los mensajes WIN correspondientes.
+
+### Observaciones Generales y mejoras
+
+Si bien cuando se envían batchsizes grandes, de digamos 200 o 2000 apuestas se justifica un header de 23 bytes, para mensajes más cortos es bastante overhead. Si se quisiera mantener las mismas utilidades, (como mandar un ACK al batchID correspondiente ó revisar que efectivamente llegaron tantas bets como se indico en [BATCHSIZE]), pero con un header de menor tamaño, la mejor manera sería encodeando los datos numéricos de mejor manera, y reducir al mínimo delimitadores en donde se pueda, i.e.: ',' y ';'.

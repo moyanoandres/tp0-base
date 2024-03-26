@@ -11,12 +11,12 @@ import (
 )
 
 const (
-	HEADER_SIZE = 8
+	HEADER_SIZE = 12
 )
 
 func receiveWIN(conn net.Conn) (int, error) {
 	// Read the header (WIN message) from the server
-	header := make([]byte, HEADER_SIZE) // Header size is fixed at 8 bytes: 'WIN,' + 4 bytes of payload size
+	header := make([]byte, HEADER_SIZE) // Header size is fixed at 12 bytes: 'WIN,' + 8 bytes of payload size
 	n, err := io.ReadFull(conn, header)
 	if err != nil || n < HEADER_SIZE {
 		return -1, err
@@ -66,7 +66,7 @@ func sendEndNotification(c *Client) (int, error) {
 	}
 
 	clientID, err := strconv.Atoi(c.config.ID)
-	message := fmt.Sprintf("FIN000000%4d\n", clientID)
+	message := fmt.Sprintf("FIN%20d\n", clientID)
 	log.Infof("action: send_fin | result: in_progress | client_id: %v",
 		c.config.ID,
 	)
@@ -116,7 +116,7 @@ func SendBatch(c *Client, bets []*Bet, batchID int) (bool, error) {
 	}
 
 	// BET PAYLOAD_SIZE BATCHSIZE BatchID PAYLOAD
-	message := fmt.Sprintf("BET%04d%02d%04d%s", len(payload), len(bets), batchID, payload)
+	message := fmt.Sprintf("BET%08d%04d%08d%s", len(payload), len(bets), batchID, payload)
 	//log.Infof("Bet message being sent: %v", message)
 
 	// Enviar el mensaje al servidor
@@ -163,7 +163,7 @@ func SendBatch(c *Client, bets []*Bet, batchID int) (bool, error) {
 // receiveACK receives and parses the ACK message from the server.
 func receiveACK(conn net.Conn) (string, error) {
 	// Read the header (ACK message) from the server
-	header := make([]byte, HEADER_SIZE) // Header size is fixed at 8 bytes: 'ACK,' + 4 bytes of payload size
+	header := make([]byte, HEADER_SIZE) // Header size is fixed at 12 bytes: 'ACK,' + 8 bytes of payload size
 	n, err := io.ReadFull(conn, header)
 	if err != nil || n < HEADER_SIZE {
 		return "", err
